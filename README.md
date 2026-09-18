@@ -95,4 +95,22 @@ Locally the same names go in `.env.local` (copy `.env.example`), which git ignor
 
 ## Verified
 
-_Filled in by the T1.2 smoke test (see the section below once it has run)._
+_2026-09-18 (T1.2). The template was used to spin up a throwaway app end to end, timed, then the throwaway was removed. No Supabase schema was created for this (health answers `db: "skipped"` without the env), and nothing was spent._
+
+**Elapsed: 10 min 05 s** from "create the repo from the template" to "curl the live health route" (well under the 15-minute bar). Almost all of it was waiting on Vercel: the build itself took 16 s, but the Hobby team runs one build at a time and four other projects were deploying at the same moment, so the second deploy sat in the queue for about six minutes. On a quiet team the same run is roughly 3 minutes.
+
+| Step | Command | Result | Clock |
+|---|---|---|---|
+| Create from template | `gh repo create KalpKan/template-smoke --template KalpKan/portfolio-template --public --clone` | repo created `20:17:48Z`, pushed `20:17:52Z` (start marker `20:17:46Z`) | 6 s |
+| Clone + install | `gh repo clone KalpKan/template-smoke && npm ci` | `found 0 vulnerabilities` | T+6 s |
+| Tests | `npm test` | `Test Files 7 passed (7)` · `Tests 28 passed (28)` | T+9 s |
+| Build | `npm run build` | `✓ Compiled successfully in 2.6s` · routes `○ /`, `○ /_not-found`, `ƒ /api/health` | T+16 s |
+| Deploy | `npx vercel@latest deploy --prod --yes --scope kks-projects-2edcb11a` (run from the `template-smoke` folder, so the project is named after it) | project `template-smoke` created; first call reported `Error: fetch failed` after the upload but the deployment still built (`● Ready`, 40 s); the retry queued behind other builds and came back `● Ready` in 16 s | T+590 s |
+| Health | `curl https://template-smoke.vercel.app/api/health` | `{"ok":true,"service":"template","db":"skipped","time":"2026-09-18T22:05:02.955Z"}` · `HTTP 200` · `cache-control: no-store` | T+599 s |
+| Footer | `curl https://template-smoke.vercel.app/ \| grep kalpkan` | `href="https://kalpkan.com"` · `part of kalpkan.com` | |
+| PostHog proxy | `curl -o /dev/null -w '%{http_code} %{content_type}' https://template-smoke.vercel.app/ingest/static/array.js` | `200 application/javascript` (313 KB of posthog-js served through the app's own origin) | |
+| Clean-up | `printf 'y\n' \| npx vercel@latest project rm template-smoke --scope kks-projects-2edcb11a` | `Success! Project template-smoke removed`; `https://template-smoke.vercel.app` → 404 | |
+
+The throwaway GitHub repo `KalpKan/template-smoke` was archived rather than deleted: the `gh` login on this Mac has the `repo` scope but not `delete_repo`, and adding a scope is an account-level permission only Kalp should grant. To delete it: `gh auth refresh -h github.com -s delete_repo` (one browser click), then `gh repo delete KalpKan/template-smoke --yes`.
+
+Note for the next spin-up: `vercel deploy` printing `Error: fetch failed` right after the upload does not mean the deploy failed. Run `npx vercel@latest ls <project> --scope kks-projects-2edcb11a` before retrying; if it already says `● Ready`, you are done.
